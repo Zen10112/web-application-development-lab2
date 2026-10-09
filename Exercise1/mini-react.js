@@ -1,4 +1,5 @@
 
+
 export function createTextElement(text) {
   return {
     type: "TEXT_ELEMENT",
@@ -10,57 +11,80 @@ export function createTextElement(text) {
 }
 
 export function createElement(type, props, ...children) {
-  const normalizedChildren = children.map(child =>
-    typeof child === "object" && child !== null
-      ? child
-      : createTextElement(child)
-  );
-
   return {
     type,
     props: {
       ...(props ?? {}),
-      children: normalizedChildren
+      children: children.map(child =>
+        typeof child === "object" && child !== null
+          ? child
+          : createTextElement(child)
+      )
     }
   };
 }
 
 export function renderToDOM(vNode) {
-  // 1. Create Real DOM Node
-  const dom =
-    vNode.type === "TEXT_ELEMENT"
-      ? document.createTextNode(vNode.props.nodeValue)
-      : document.createElement(vNode.type);
+  if (vNode == null || typeof vNode !== "object") {
+    throw new TypeError("Invalid VNode");
+  }
 
-  // 2. Handle Props
-  Object.entries(vNode.props).forEach(([key, value]) => {
-    if (key === "children" || key === "nodeValue") {
+  const { type, props = {} } = vNode;
+
+  if (type === "TEXT_ELEMENT") {
+    return document.createTextNode(props.nodeValue);
+  }
+
+  const dom = document.createElement(type);
+
+  Object.entries(props).forEach(([key, value]) => {
+    if (key === "children" || value == null) {
       return;
     }
 
-    // Handle event listeners
-    if (key.startsWith("on") && typeof value === "function") {
+    if (
+      key.startsWith("on") &&
+      typeof value === "function"
+    ) {
       const eventName = key.slice(2).toLowerCase();
       dom.addEventListener(eventName, value);
+      return;
     }
-    // Handle className
-    else if (key === "className") {
+
+    if (key === "className") {
       dom.setAttribute("class", value);
+      return;
     }
-    // Handle other attributes
-    else if (!key.startsWith("on") && value != null) {
-      dom.setAttribute(key, value);
+
+    if (key === "htmlFor") {
+      dom.setAttribute("for", value);
+      return;
     }
+
+    if (key === "style" && typeof value === "object") {
+      Object.assign(dom.style, value);
+      return;
+    }
+
+    if (key.startsWith("on")) {
+      return;
+    }
+
+    if (typeof value === "boolean") {
+      if (key.startsWith("aria-")) {
+        dom.setAttribute(key, String(value));
+      } else if (value) {
+        dom.setAttribute(key, "");
+      }
+      return;
+    }
+
+    dom.setAttribute(key, String(value));
   });
 
-  // 3. Recursively render children
-  const children = vNode.props.children || [];
-
-  children.forEach(child => {
-    const childDOM = renderToDOM(child);
-    dom.appendChild(childDOM);
+  (props.children || []).forEach(child => {
+    dom.appendChild(renderToDOM(child));
   });
 
-  // 4. Return Real DOM Node
   return dom;
 }
